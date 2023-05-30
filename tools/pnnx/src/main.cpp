@@ -224,6 +224,10 @@ int main(int argc, char** argv)
     std::vector<std::string> customop_modules;
     std::vector<std::string> module_operators;
 
+    module_operators.push_back("scaling_converter.PoolingModuleNoProj");
+    module_operators.push_back("zipformer.AttentionDownsampleUnsqueeze");
+    module_operators.push_back("zipformer2.AttentionDownsampleUnsqueeze");
+
     for (int i = 2; i < argc; i++)
     {
         // key=value
@@ -370,7 +374,21 @@ int main(int argc, char** argv)
     //     mod.dump(true, false, false);
     //     mod.dump(true, true, true);
 
-    auto g = mod.get_method("forward").graph();
+    auto method = mod.find_method("forward");
+    if (!method)
+    {
+        auto methods = mod.get_methods();
+        if (methods.empty())
+        {
+            fprintf(stderr, "No method in torchscript\n");
+            return -1;
+        }
+
+        method = methods[0];
+        fprintf(stderr, "Use method %s as the entrypoint instead of forward\n", method->name().c_str());
+    }
+
+    auto g = method->graph();
 
     //     g->dump();
 

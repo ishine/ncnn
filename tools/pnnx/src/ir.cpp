@@ -29,6 +29,7 @@
 #endif
 
 #include "storezip.h"
+#include "utils.h"
 
 namespace pnnx {
 
@@ -429,13 +430,7 @@ Attribute::Attribute(const at::Tensor& t)
 
     if (shape.size() > 0)
     {
-        int size = shape[0];
-        for (size_t i = 1; i < shape.size(); i++)
-        {
-            size *= shape[i];
-        }
-
-        data.resize(size * type_to_elemsize(type));
+        data.resize(elemcount() * type_to_elemsize(type));
         memcpy((void*)data.data(), (const void*)t.cpu().contiguous().data_ptr(), data.size());
     }
 }
@@ -448,14 +443,93 @@ Attribute::Attribute(const std::initializer_list<int>& _shape, const std::vector
 
     if (shape.size() > 0)
     {
-        int size = shape[0];
-        for (size_t i = 1; i < shape.size(); i++)
-        {
-            size *= shape[i];
-        }
-
-        data.resize(size * type_to_elemsize(type));
+        data.resize(elemcount() * type_to_elemsize(type));
         memcpy((void*)data.data(), (const void*)t.data(), data.size());
+    }
+}
+
+size_t Attribute::elemsize() const
+{
+    return type_to_elemsize(type);
+}
+
+int Attribute::elemcount() const
+{
+    if (shape.empty())
+        return 0;
+
+    int size = shape[0];
+    for (size_t i = 1; i < shape.size(); i++)
+    {
+        size *= shape[i];
+    }
+
+    return size;
+}
+
+std::vector<float> Attribute::get_float32_data() const
+{
+    std::vector<float> v(elemcount());
+
+    if (type == 1)
+    {
+        memcpy((void*)v.data(), (const void*)data.data(), data.size());
+    }
+    else if (type == 2)
+    {
+        // f64
+        const double* p = (const double*)data.data();
+        for (size_t i = 0; i < v.size(); i++)
+        {
+            v[i] = float(p[i]);
+        }
+    }
+    else if (type == 3)
+    {
+        // f16
+        const unsigned short* p = (const unsigned short*)data.data();
+        for (size_t i = 0; i < v.size(); i++)
+        {
+            v[i] = float16_to_float32(p[i]);
+        }
+    }
+    else
+    {
+        fprintf(stderr, "cannot convert type %d to float32 data\n", type);
+    }
+
+    return v;
+}
+
+void Attribute::set_float32_data(const std::vector<float>& newdata)
+{
+    data.resize(newdata.size() * elemsize());
+
+    if (type == 1)
+    {
+        memcpy((void*)data.data(), (const void*)newdata.data(), data.size());
+    }
+    else if (type == 2)
+    {
+        // f64
+        double* p = (double*)data.data();
+        for (size_t i = 0; i < newdata.size(); i++)
+        {
+            p[i] = newdata[i];
+        }
+    }
+    else if (type == 3)
+    {
+        // f16
+        unsigned short* p = (unsigned short*)data.data();
+        for (size_t i = 0; i < newdata.size(); i++)
+        {
+            p[i] = float32_to_float16(newdata[i]);
+        }
+    }
+    else
+    {
+        fprintf(stderr, "cannot convert float32 data to type %d\n", type);
     }
 }
 
@@ -1756,6 +1830,26 @@ int Graph::python(const std::string& pypath, const std::string& pnnxbinpath)
                     fprintf(pyfp, "v_%s = v_%s[%s]\n", sanitize_identifier(op->outputs[0]->name).c_str(), sanitize_identifier(op->inputs[0]->name).c_str(), index_expr.c_str());
                 }
             }
+            else if (op->type == "Tensor.expand")
+            {
+                // expand
+                fprintf(pyfp, "v_%s = v_%s.%s(", sanitize_identifier(op->outputs[0]->name).c_str(), sanitize_identifier(op->inputs[0]->name).c_str(), op->type.substr(7).c_str());
+                if (op->inputs.size() == 2)
+                {
+                    fprintf(pyfp, "*v_%s", sanitize_identifier(op->inputs[1]->name).c_str());
+                }
+                else
+                {
+                    const std::vector<int>& shape = op->params.at("shape").ai;
+                    for (size_t i = 0; i < shape.size(); i++)
+                    {
+                        fprintf(pyfp, "%d", shape[i]);
+                        if (i + 1 != shape.size())
+                            fprintf(pyfp, ", ");
+                    }
+                }
+                fprintf(pyfp, ")\n");
+            }
             else if (op->type == "Tensor.view" || op->type == "Tensor.reshape")
             {
                 // view reshape
@@ -1934,7 +2028,43 @@ int Graph::python(const std::string& pypath, const std::string& pnnxbinpath)
                 {
                     std::string in0 = sanitize_identifier(op->inputs[0]->name);
                     std::string in1 = sanitize_identifier(op->inputs[1]->name);
-                    fprintf(pyfp, "v_%s, v_%s, v_%s", in0.c_str(), in1.c_str(), in1.c_str());
+                    if (op->inputnames.size() == 2 && op->inputnames[1] == "attn_mask")
+                    {
+                        fprintf(pyfp, "v_%s, v_%s, v_%s, attn_mask=v_%s", in0.c_str(), in0.c_str(), in0.c_str(), in1.c_str());
+                    }
+                    else
+                    {
+                        fprintf(pyfp, "v_%s, v_%s, v_%s", in0.c_str(), in1.c_str(), in1.c_str());
+                    }
+                }
+                else if (op->inputs.size() == 3)
+                {
+                    std::string in0 = sanitize_identifier(op->inputs[0]->name);
+                    std::string in1 = sanitize_identifier(op->inputs[1]->name);
+                    std::string in2 = sanitize_identifier(op->inputs[2]->name);
+                    if (op->inputnames.size() == 3 && op->inputnames[2] == "attn_mask")
+                    {
+                        fprintf(pyfp, "v_%s, v_%s, v_%s, attn_mask=v_%s", in0.c_str(), in1.c_str(), in1.c_str(), in2.c_str());
+                    }
+                    else
+                    {
+                        fprintf(pyfp, "v_%s, v_%s, v_%s", in0.c_str(), in1.c_str(), in2.c_str());
+                    }
+                }
+                else if (op->inputs.size() == 4)
+                {
+                    std::string in0 = sanitize_identifier(op->inputs[0]->name);
+                    std::string in1 = sanitize_identifier(op->inputs[1]->name);
+                    std::string in2 = sanitize_identifier(op->inputs[2]->name);
+                    std::string in3 = sanitize_identifier(op->inputs[3]->name);
+                    if (op->inputnames.size() == 4 && op->inputnames[3] == "attn_mask")
+                    {
+                        fprintf(pyfp, "v_%s, v_%s, v_%s, attn_mask=v_%s", in0.c_str(), in1.c_str(), in2.c_str(), in3.c_str());
+                    }
+                    else
+                    {
+                        fprintf(pyfp, "v_%s, v_%s, v_%s, v_%s", in0.c_str(), in1.c_str(), in2.c_str(), in3.c_str());
+                    }
                 }
                 else
                 {

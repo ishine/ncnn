@@ -28,7 +28,6 @@
 #include "pybind11_mat.h"
 #include "pybind11_datareader.h"
 #include "pybind11_allocator.h"
-#include "pybind11_modelbin.h"
 #include "pybind11_layer.h"
 using namespace ncnn;
 
@@ -148,13 +147,11 @@ PYBIND11_MODULE(ncnn, m)
     .def_readwrite("consumer", &Blob::consumer)
     .def_readwrite("shape", &Blob::shape);
 
-    py::class_<ModelBin, PyModelBin<> >(m, "ModelBin");
-    py::class_<ModelBinFromDataReader, ModelBin, PyModelBinOther<ModelBinFromDataReader> >(m, "ModelBinFromDataReader")
-    .def(py::init<const DataReader&>(), py::arg("dr"))
-    .def("load", &ModelBinFromDataReader::load, py::arg("w"), py::arg("type"));
-    py::class_<ModelBinFromMatArray, ModelBin, PyModelBinOther<ModelBinFromMatArray> >(m, "ModelBinFromMatArray")
-    .def(py::init<const Mat*>(), py::arg("weights"))
-    .def("load", &ModelBinFromMatArray::load, py::arg("w"), py::arg("type"));
+    py::class_<ModelBin>(m, "ModelBin")
+    .def(py::init<>())
+    .def("load", (Mat(ModelBin::*)(int, int) const) & ModelBin::load, py::arg("w"), py::arg("type"))
+    .def("load", (Mat(ModelBin::*)(int, int, int) const) & ModelBin::load, py::arg("w"), py::arg("h"), py::arg("type"))
+    .def("load", (Mat(ModelBin::*)(int, int, int, int) const) & ModelBin::load, py::arg("w"), py::arg("h"), py::arg("c"), py::arg("type"));
 
     py::class_<ParamDict>(m, "ParamDict")
     .def(py::init<>())
@@ -974,6 +971,9 @@ PYBIND11_MODULE(ncnn, m)
     m.def("get_cpu_count", &get_cpu_count);
     m.def("get_little_cpu_count", &get_little_cpu_count);
     m.def("get_big_cpu_count", &get_big_cpu_count);
+    m.def("get_physical_cpu_count", &get_physical_cpu_count);
+    m.def("get_physical_little_cpu_count", &get_physical_little_cpu_count);
+    m.def("get_physical_big_cpu_count", &get_physical_big_cpu_count);
     m.def("get_cpu_powersave", &get_cpu_powersave);
     m.def("set_cpu_powersave", &set_cpu_powersave, py::arg("powersave"));
     m.def("get_omp_num_threads", &get_omp_num_threads);
