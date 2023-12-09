@@ -45,7 +45,7 @@ class IcefallZipformerStateSelect_2 : public IcefallZipformerStateSelect
 public:
     const char* match_type_str() const
     {
-        return "__torch__.zipformer2.ZipformerStateSelect";
+        return "__torch__.zipformer_for_ncnn_export_only.ZipformerStateSelect";
     }
 };
 

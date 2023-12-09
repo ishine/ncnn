@@ -226,7 +226,7 @@ int main(int argc, char** argv)
 
     module_operators.push_back("scaling_converter.PoolingModuleNoProj");
     module_operators.push_back("zipformer.AttentionDownsampleUnsqueeze");
-    module_operators.push_back("zipformer2.AttentionDownsampleUnsqueeze");
+    module_operators.push_back("zipformer_for_ncnn_export_only.AttentionDownsampleUnsqueeze");
 
     for (int i = 2; i < argc; i++)
     {

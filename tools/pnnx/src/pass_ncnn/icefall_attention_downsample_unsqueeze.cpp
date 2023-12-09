@@ -53,7 +53,7 @@ public:
         return R"PNNXIR(7767517
 3 2
 pnnx.Input                              x                0 1 x
-zipformer2.AttentionDownsampleUnsqueeze  op_0             1 1 x out
+zipformer_for_ncnn_export_only.AttentionDownsampleUnsqueeze  op_0             1 1 x out
 pnnx.Output                             output           1 0 out
 )PNNXIR";
     }

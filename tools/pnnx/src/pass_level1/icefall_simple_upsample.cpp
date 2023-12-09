@@ -64,7 +64,7 @@ class IcefallSimpleUpsample_2 : public IcefallSimpleUpsample
 public:
     const char* match_type_str() const
     {
-        return "__torch__.zipformer2.SimpleUpsample";
+        return "__torch__.zipformer_for_ncnn_export_only.SimpleUpsample";
     }
 };
 
